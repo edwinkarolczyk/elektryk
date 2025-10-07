@@ -1,0 +1,63 @@
+{
+  "ui": {
+    "show_grid": true,
+    "snap_to_grid": true,
+    "default_grid_size": 20,
+    "show_conductor_chips_on_canvas": true,
+    "auto_open_connections_dialog_on_place": true
+  },
+  "limits": {
+    "max_connections_per_element": 4,
+    "voltage_drop_lighting": 3.0,
+    "voltage_drop_general": 5.0,
+    "load_warning": 0.8,
+    "load_error": 1.0,
+    "socket_default_current_a": 16.0
+  },
+  "element_types": {
+    "gniazdko": {"shape": "circle", "radius": 8},
+    "gniazdko_podwojne": {"shape": "circle", "radius": 9},
+    "wylacznik_1": {"shape": "square", "size": 16},
+    "wylacznik_2": {"shape": "square", "size": 16},
+    "roleta": {"shape": "triangle", "size": 16},
+    "lampa": {"shape": "triangle", "size": 16}
+  },
+  "colors": {
+    "conductors": {
+      "L": "#a52a2a",
+      "N": "#1a73e8",
+      "PE": "#9acd32",
+      "L1": "#a52a2a",
+      "L2": "#000000",
+      "L3": "#808080"
+    },
+    "circuit_palette": {
+      "niebieski": "#1a73e8",
+      "czarny": "#000000",
+      "zolto-zielony": "#9acd32",
+      "szary": "#808080"
+    }
+  },
+  "cables": {
+    "types": ["2x1.5", "3x1.5", "3x2.5", "5x2.5", "5x4", "5x6", "5x10"],
+    "defaults": {
+      "2x": ["L", "N"],
+      "3x": ["L", "N", "PE"],
+      "5x": ["L1", "L2", "L3", "N", "PE"]
+    }
+  },
+  "advisory": {
+    "breaker_to_gauge": {
+      "B10": "3x1.5",
+      "B16": "3x2.5",
+      "B20": "3x2.5",
+      "C16": "3x2.5",
+      "C20": "3x2.5"
+    },
+    "typical_by_category": {
+      "gniazdka": { "breaker": "B16", "cable": "3x2.5" },
+      "swiatlo": { "breaker": "B10", "cable": "3x1.5" },
+      "rolety": { "breaker": "B10", "cable": "3x1.5" }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "version": "0.6.0",
+  "houses": [
+    {
+      "name": "Dom 1",
+      "rooms": [
+        {
+          "name": "Sypialnia",
+          "background_image": "",
+          "elements": []
+        }
+      ]
+    }
+  ],
+  "circuits": [
+    { "id": "O1", "name": "Gniazda sypialnia", "color": "niebieski", "breaker": "B16", "desc": "", "assigned_leads": [] },
+    { "id": "O2", "name": "Światło sypialnia", "color": "czarny", "breaker": "B10", "desc": "", "assigned_leads": [] },
+    { "id": "O99", "name": "Płyta indukcyjna", "color": "szary", "breaker": "C16", "desc": "", "assigned_leads": [] }
+  ],
+  "distribution_board": { "free_leads": [] },
+  "meta": { "project_name": "Elektryka Full Upgrade" }
+}
