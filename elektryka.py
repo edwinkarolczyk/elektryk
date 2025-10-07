@@ -1,4 +1,4 @@
-# Elektryka 0.7.0
+# Elektryka 0.7.2-pre
 # Nowe:
 # - Rysowanie połączeń między elementami (Linki) w kolorze wybranego obwodu
 # - Tryb "Origami" układu pokoju: rysowanie segmentów: ŚCIANA / OKNO / DRZWI / PRZEJŚCIE
@@ -11,7 +11,7 @@ import json, os
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Optional, Tuple
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 
 try:
     from PIL import Image, ImageDraw, ImageTk
@@ -20,7 +20,7 @@ except Exception:
     PIL_AVAILABLE = False
     Image = ImageDraw = ImageTk = None
 
-APP_TITLE = "Elektryka 0.7.0"
+APP_TITLE = "Elektryka 0.7.2-pre"
 SETTINGS_FILE = "settings.json"
 PROJECT_FILE_DEFAULT = "project.json"
 
@@ -53,6 +53,9 @@ class Segment:
     kind: str              # "SCIANA" | "OKNO" | "DRZWI" | "PRZEJSCIE"
     a: Tuple[int,int]      # (x1,y1)
     b: Tuple[int,int]      # (x2,y2)
+    label: str = ""        # np. N/E/S/W
+    portal_to_room: Optional[str] = None   # jeśli PRZEJSCIE łączy inny pokój
+    portal_side: Optional[str] = None      # "N"|"E"|"S"|"W"
 
 @dataclass
 class Link:
@@ -60,6 +63,7 @@ class Link:
     b_id: str              # element id cel
     circuit_id: Optional[str] = None
     note: str = ""
+    b_room: Optional[str] = None           # jeśli cel w innym pokoju
 
 @dataclass
 class Room:
@@ -86,7 +90,7 @@ class Circuit:
 
 @dataclass
 class Project:
-    version: str = "0.7.0"
+    version: str = "0.7.2-pre"
     houses: List[House] = field(default_factory=list)
     circuits: List[Circuit] = field(default_factory=list)
     distribution_board: dict = field(default_factory=lambda: {"free_leads": []})
@@ -173,6 +177,7 @@ class ElektrykaApp:
         hb = ttk.Frame(left); hb.pack(fill="x", padx=8, pady=4)
         ttk.Button(hb, text="+ Dom", command=self._add_house).pack(side="left")
         ttk.Button(hb, text="Usuń", command=self._del_house).pack(side="left", padx=6)
+        ttk.Button(hb, text="Zmień nazwę", command=self._rename_house).pack(side="left", padx=6)
 
         ttk.Separator(left).pack(fill="x", padx=8, pady=8)
         ttk.Label(left, text="Pomieszczenia", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=8)
@@ -180,7 +185,9 @@ class ElektrykaApp:
         self.lb_rooms.bind("<<ListboxSelect>>", lambda e:self._on_room_select())
         rb = ttk.Frame(left); rb.pack(fill="x", padx=8, pady=4)
         ttk.Button(rb, text="+ Pokój", command=self._add_room).pack(side="left")
+        ttk.Button(rb, text="+ Pokój (wymiary mm)", command=self._add_room_by_size).pack(side="left", padx=6)
         ttk.Button(rb, text="Usuń", command=self._del_room).pack(side="left", padx=6)
+        ttk.Button(rb, text="Zmień nazwę", command=self._rename_room).pack(side="left", padx=6)
 
         ttk.Separator(left).pack(fill="x", padx=8, pady=8)
         ttk.Label(left, text="Tło pokoju (JPG/JPEG/PNG)", font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=8)
@@ -205,6 +212,7 @@ class ElektrykaApp:
         lr = ttk.Frame(left); lr.pack(fill="x", padx=8, pady=4)
         ttk.Button(lr, text="Zakończ odcinek (PPM też)", command=self._finish_segment_poly).pack(side="left")
         ttk.Button(lr, text="Wyczyść układ", command=self._clear_layout).pack(side="left", padx=6)
+        ttk.Button(left, text="Połącz pokoje (boki)…", command=self._connect_rooms_dialog).pack(fill="x", padx=8, pady=(2,8))
 
         # RIGHT
         right = ttk.Frame(self.main, width=380)
@@ -321,6 +329,9 @@ class ElektrykaApp:
 
     def _del_house(self):
         if not self.project.houses: return
+        h = self._cur_house()
+        if not messagebox.askyesno("Usuń dom", f"Czy na pewno usunąć dom „{h.name}” wraz z pomieszczeniami?"):
+            return
         del self.project.houses[self.current_house_idx]
         self.current_house_idx = 0; self.current_room_idx = 0
         self._refresh_lists(); self._redraw()
@@ -333,9 +344,141 @@ class ElektrykaApp:
     def _del_room(self):
         h = self._cur_house()
         if not h.rooms: return
+        r = self._cur_room()
+        if not messagebox.askyesno("Usuń pokój", f"Czy na pewno usunąć pokój „{r.name}”?"):
+            return
         del h.rooms[self.current_room_idx]
         self.current_room_idx = 0
         self._refresh_lists(); self._redraw()
+
+    def _rename_house(self):
+        if not self.project.houses: return
+        h = self._cur_house()
+        new = simpledialog.askstring("Nazwa domu", "Podaj nową nazwę:", initialvalue=h.name, parent=self.root)
+        if new:
+            h.name = new.strip()
+            self._refresh_lists()
+
+    def _rename_room(self):
+        h = self._cur_house()
+        if not h.rooms: return
+        r = self._cur_room()
+        new = simpledialog.askstring("Nazwa pokoju", "Podaj nową nazwę:", initialvalue=r.name, parent=self.root)
+        if new:
+            r.name = new.strip()
+            self._refresh_lists()
+
+    def _add_room_by_size(self):
+        d = tk.Toplevel(self.root); d.title("Nowy pokój z wymiarów (mm)"); d.transient(self.root); d.grab_set()
+        frn = ttk.Frame(d); frn.pack(fill="x", padx=8, pady=(8,4))
+        ttk.Label(frn, text="Nazwa:").pack(side="left"); e_name = ttk.Entry(frn); e_name.pack(side="left", fill="x", expand=True, padx=6)
+        fr = ttk.Frame(d); fr.pack(fill="x", padx=8, pady=4)
+        ttk.Label(fr, text="Szerokość [mm]:").pack(side="left"); e_w = ttk.Entry(fr, width=10); e_w.pack(side="left", padx=6)
+        ttk.Label(fr, text="Wysokość [mm]:").pack(side="left"); e_h = ttk.Entry(fr, width=10); e_h.pack(side="left", padx=6)
+        ttk.Label(d, text="Rysowane 4 ściany prostokąta w centrum canvasa (skala px_per_meter).", foreground="#555").pack(anchor="w", padx=8, pady=(0,8))
+
+        def ok():
+            try:
+                name = e_name.get().strip() or f"Pokój {len(self._cur_house().rooms)+1}"
+                wmm = float(e_w.get()); hmm = float(e_h.get())
+                if wmm <= 0 or hmm <= 0: raise ValueError
+            except Exception:
+                messagebox.showwarning("Wymiary", "Podaj dodatnie liczby (mm)."); return
+            ppm = float(self.settings.get("ui", {}).get("px_per_meter", 50))
+            wpx = int((wmm/1000.0)*ppm); hpx = int((hmm/1000.0)*ppm)
+            cw = max(800, self.canvas.winfo_width()); ch = max(600, self.canvas.winfo_height())
+            cx, cy = cw//2, ch//2
+            x1, y1 = cx - wpx//2, cy - hpx//2
+            x2, y2 = cx + wpx//2, cy + hpx//2
+            room = Room(name=name)
+            room.segments.append(Segment(kind="SCIANA", a=(x1,y1), b=(x2,y1), label="N", portal_side="N"))
+            room.segments.append(Segment(kind="SCIANA", a=(x2,y1), b=(x2,y2), label="E", portal_side="E"))
+            room.segments.append(Segment(kind="SCIANA", a=(x2,y2), b=(x1,y2), label="S", portal_side="S"))
+            room.segments.append(Segment(kind="SCIANA", a=(x1,y2), b=(x1,y1), label="W", portal_side="W"))
+            h = self._cur_house(); h.rooms.append(room)
+            self.current_room_idx = len(h.rooms)-1
+            d.destroy(); self._refresh_lists(); self._redraw()
+
+        btns = ttk.Frame(d); btns.pack(fill="x", padx=8, pady=8)
+        ttk.Button(btns, text="OK", command=ok).pack(side="right")
+        ttk.Button(btns, text="Anuluj", command=d.destroy).pack(side="right", padx=6)
+
+    def _connect_rooms_dialog(self):
+        h = self._cur_house()
+        if len(h.rooms) < 2:
+            messagebox.showinfo("Połącz pokoje", "W tym domu jest tylko jedno pomieszczenie."); return
+        d = tk.Toplevel(self.root); d.title("Połącz pokoje (boki)"); d.transient(self.root); d.grab_set()
+        cur_room = self._cur_room()
+        ttk.Label(d, text=f"Bieżący pokój: {cur_room.name}").pack(anchor="w", padx=8, pady=(8,2))
+        fr1 = ttk.Frame(d); fr1.pack(fill="x", padx=8, pady=4)
+        ttk.Label(fr1, text="Strona pokoju A:").pack(side="left")
+        side_a = tk.StringVar(value="E")
+        ttk.Combobox(fr1, textvariable=side_a, values=["N","E","S","W"], state="readonly", width=6).pack(side="left", padx=6)
+        fr2 = ttk.Frame(d); fr2.pack(fill="x", padx=8, pady=4)
+        ttk.Label(fr2, text="Pokój B:").pack(side="left")
+        room_names = [r.name for r in h.rooms if r is not cur_room]
+        room_b = tk.StringVar(value=room_names[0] if room_names else "")
+        ttk.Combobox(fr2, textvariable=room_b, values=room_names, state="readonly", width=24).pack(side="left", padx=6)
+        fr3 = ttk.Frame(d); fr3.pack(fill="x", padx=8, pady=4)
+        ttk.Label(fr3, text="Strona pokoju B:").pack(side="left")
+        side_b = tk.StringVar(value="W")
+        ttk.Combobox(fr3, textvariable=side_b, values=["N","E","S","W"], state="readonly", width=6).pack(side="left", padx=6)
+        ttk.Label(d, text="Portal pojawi się w połowie ścian (PRZEJŚCIE).", foreground="#555").pack(anchor="w", padx=8, pady=(0,8))
+
+        def mid_of_side(room: Room, side: str):
+            for s in room.segments:
+                if s.kind == "SCIANA" and s.portal_side == side:
+                    return (s.a[0], s.a[1], s.b[0], s.b[1])
+            walls = [s for s in room.segments if s.kind == "SCIANA"]
+            if not walls:
+                return None
+            if side in ("N", "S"):
+                horiz = [s for s in walls if s.a[1] == s.b[1]]
+                if not horiz:
+                    return None
+                if side == "N":
+                    seg = min(horiz, key=lambda s: s.a[1])
+                else:
+                    seg = max(horiz, key=lambda s: s.a[1])
+            else:
+                vert = [s for s in walls if s.a[0] == s.b[0]]
+                if not vert:
+                    return None
+                if side == "W":
+                    seg = min(vert, key=lambda s: s.a[0])
+                else:
+                    seg = max(vert, key=lambda s: s.a[0])
+            return (seg.a[0], seg.a[1], seg.b[0], seg.b[1])
+
+        def midpoint(x1,y1,x2,y2): return int((x1+x2)/2), int((y1+y2)/2)
+
+        def ok():
+            rb_name = room_b.get().strip(); B = next((r for r in h.rooms if r.name == rb_name), None)
+            if not B:
+                messagebox.showwarning("Połącz pokoje", "Nie znaleziono pokoju B."); return
+            A = cur_room; sa = side_a.get(); sb = side_b.get()
+            segA = mid_of_side(A, sa); segB = mid_of_side(B, sb)
+            if not segA or not segB:
+                messagebox.showwarning("Połącz pokoje", "W jednym z pokoi brak ściany z tą stroną."); return
+            ax1, ay1, ax2, ay2 = segA; bx1, by1, bx2, by2 = segB
+            ax, ay = midpoint(ax1, ay1, ax2, ay2); bx, by = midpoint(bx1, by1, bx2, by2)
+            if ay1 == ay2:  # horizontal wall
+                pa_a = ((ax-10, ay), (ax+10, ay))
+            else:
+                pa_a = ((ax, ay-10), (ax, ay+10))
+            if by1 == by2:
+                pa_b = ((bx-10, by), (bx+10, by))
+            else:
+                pa_b = ((bx, by-10), (bx, by+10))
+            A.segments.append(Segment(kind="PRZEJSCIE", a=pa_a[0], b=pa_a[1],
+                                      label=f"{A.name}→{B.name}", portal_to_room=B.name, portal_side=sa))
+            B.segments.append(Segment(kind="PRZEJSCIE", a=pa_b[0], b=pa_b[1],
+                                      label=f"{B.name}→{A.name}", portal_to_room=A.name, portal_side=sb))
+            d.destroy(); self._redraw()
+
+        btns = ttk.Frame(d); btns.pack(fill="x", padx=8, pady=8)
+        ttk.Button(btns, text="OK", command=ok).pack(side="right")
+        ttk.Button(btns, text="Anuluj", command=d.destroy).pack(side="right", padx=6)
 
     # ---------- tło ----------
     def load_background(self):
@@ -452,6 +595,14 @@ class ElektrykaApp:
             width = 4 if s.kind=="SCIANA" else 3
             dash = () if s.kind in ("SCIANA","DRZWI") else (6,4)
             self.canvas.create_line(s.a[0], s.a[1], s.b[0], s.b[1], fill=col, width=width, dash=dash)
+            if s.label:
+                mx = int((s.a[0]+s.b[0])/2)
+                my = int((s.a[1]+s.b[1])/2)
+                if s.a[0] == s.b[0]:
+                    mx += -12 if s.a[1] < s.b[1] else 12
+                else:
+                    my -= 12 if s.a[0] < s.b[0] else -12
+                self.canvas.create_text(mx, my, text=s.label, fill="#444", font=("Segoe UI", 8, "bold"))
 
     def _draw_element(self, el: Element):
         r=8
@@ -484,11 +635,21 @@ class ElektrykaApp:
         # mapa id->element
         idx = {e.id: e for e in room.elements}
         for link in room.links:
-            if link.a_id not in idx or link.b_id not in idx: continue
+            if link.a_id not in idx: continue
             if only and pick and (link.circuit_id != pick): continue
-            a = idx[link.a_id]; b = idx[link.b_id]
+            a = idx[link.a_id]
             color = self._circuit_color_hex(link.circuit_id)
-            self.canvas.create_line(a.x, a.y, b.x, b.y, fill=color, width=3, arrow="last")
+            if link.b_id in idx:
+                b = idx[link.b_id]
+                self.canvas.create_line(a.x, a.y, b.x, b.y, fill=color, width=3, arrow="last")
+            else:
+                tgt_label = link.b_id
+                if link.b_room:
+                    tgt_label = f"{link.b_room}:{link.b_id}"
+                self.canvas.create_line(a.x, a.y, a.x+40, a.y-40, fill=color, width=2, arrow="last", dash=(4,4))
+                self.canvas.create_text(a.x+44, a.y-52, text=tgt_label, fill=color, font=("Segoe UI", 8, "bold"), anchor="w")
+            if link.note:
+                self.canvas.create_text(a.x, a.y+34, text=link.note, fill="#666", font=("Segoe UI", 7))
 
     def _redraw(self):
         self.canvas.delete("all")
@@ -557,12 +718,29 @@ class ElektrykaApp:
     # ---------- linki (połączenia graficzne) ----------
     def _open_link_dialog(self, src_el: Element):
         d = tk.Toplevel(self.root); d.title(f"Połącz: {src_el.id} → ?"); d.transient(self.root); d.grab_set()
-        ttk.Label(d, text=f"Źródło: {src_el.id}").pack(anchor="w", padx=8, pady=(8,2))
-        targets = [e.id for e in self._cur_room().elements if e.id != src_el.id]
+        ttk.Label(d, text=f"Źródło: {src_el.id} ({self._cur_room().name})").pack(anchor="w", padx=8, pady=(8,2))
+
+        frR = ttk.Frame(d); frR.pack(fill="x", padx=8, pady=4)
+        ttk.Label(frR, text="Pokój docelowy:").pack(side="left")
+        h = self._cur_house()
+        room_names = [r.name for r in h.rooms]
+        tgt_room_var = tk.StringVar(value=self._cur_room().name)
+        cb_rooms = ttk.Combobox(frR, textvariable=tgt_room_var, values=room_names, state="readonly", width=24)
+        cb_rooms.pack(side="left", padx=6)
+
         fr1 = ttk.Frame(d); fr1.pack(fill="x", padx=8, pady=4)
-        ttk.Label(fr1, text="Cel:").pack(side="left")
-        tgt_var = tk.StringVar(value=(targets[0] if targets else ""))
-        ttk.Combobox(fr1, textvariable=tgt_var, values=targets, state="readonly", width=16).pack(side="left", padx=6)
+        ttk.Label(fr1, text="Element docelowy:").pack(side="left")
+        tgt_var = tk.StringVar(value="")
+        cb_targets = ttk.Combobox(fr1, textvariable=tgt_var, values=[], state="readonly", width=18)
+        cb_targets.pack(side="left", padx=6)
+
+        def refresh_targets(*_):
+            rn = tgt_room_var.get()
+            room = next((r for r in h.rooms if r.name == rn), None)
+            ids = [e.id for e in (room.elements if room else []) if not (room is self._cur_room() and e.id == src_el.id)]
+            cb_targets["values"] = ids
+            cb_targets.set(ids[0] if ids else "")
+        tgt_room_var.trace_add("write", refresh_targets); refresh_targets()
 
         fr2 = ttk.Frame(d); fr2.pack(fill="x", padx=8, pady=4)
         ttk.Label(fr2, text="Obwód:").pack(side="left")
@@ -575,10 +753,14 @@ class ElektrykaApp:
         note = ttk.Entry(fr3); note.pack(side="left", fill="x", expand=True)
 
         def ok():
-            t = tgt_var.get().strip()
-            if not t: d.destroy(); return
-            self._cur_room().links.append(Link(a_id=src_el.id, b_id=t, circuit_id=(circ_var.get().strip() or None), note=note.get().strip()))
+            t = tgt_var.get().strip(); rn = tgt_room_var.get().strip()
+            if not t or not rn: d.destroy(); return
+            if rn == self._cur_room().name:
+                self._cur_room().links.append(Link(a_id=src_el.id, b_id=t, circuit_id=(circ_var.get().strip() or None), note=note.get().strip()))
+            else:
+                self._cur_room().links.append(Link(a_id=src_el.id, b_id=t, circuit_id=(circ_var.get().strip() or None), note=note.get().strip(), b_room=rn))
             d.destroy(); self._redraw()
+
         btns = ttk.Frame(d); btns.pack(fill="x", padx=8, pady=8)
         ttk.Button(btns, text="OK", command=ok).pack(side="right")
         ttk.Button(btns, text="Anuluj", command=d.destroy).pack(side="right", padx=6)
