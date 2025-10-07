@@ -207,23 +207,23 @@ class ElektrykaApp:
         ttk.Button(lr, text="Wyczyść układ", command=self._clear_layout).pack(side="left", padx=6)
 
         # RIGHT
-        right = ttk.Frame(self.main, width=380); right.pack(side="right", fill="y")
-        ttk.Label(right, text="Obwody", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=8, pady=(8,2))
-        self.tv_circuits = ttk.Treeview(right, columns=("name","color","breaker"), show="headings", height=8)
-        self.tv_circuits = ttk.Treeview(
-    right, columns=("name", "color", "breaker"), show="headings", height=8
-)
-self.tv_circuits.heading("name", text="Nazwa")
-self.tv_circuits.heading("color", text="Kolor")
-self.tv_circuits.heading("breaker", text="Zabezp.")
-self.tv_circuits.column("name", width=180)
-self.tv_circuits.column("color", width=90)
-self.tv_circuits.column("breaker", width=90)
-self.tv_circuits.pack(fill="x", padx=8)
+        right = ttk.Frame(self.main, width=380)
+        right.pack(side="right", fill="y")
 
-        self.tv_circuits.column("name",width=180); self.tv_circuits.column("color",width=90); self.tv_circuits.column("breaker",width=90)
+        ttk.Label(right, text="Obwody", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=8, pady=(8, 2))
+        self.tv_circuits = ttk.Treeview(
+            right, columns=("name", "color", "breaker"), show="headings", height=8
+        )
+        self.tv_circuits.heading("name", text="Nazwa")
+        self.tv_circuits.heading("color", text="Kolor")
+        self.tv_circuits.heading("breaker", text="Zabezp.")
+        self.tv_circuits.column("name", width=180)
+        self.tv_circuits.column("color", width=90)
+        self.tv_circuits.column("breaker", width=90)
         self.tv_circuits.pack(fill="x", padx=8)
-        cb = ttk.Frame(right); cb.pack(fill="x", padx=8, pady=4)
+
+        cb = ttk.Frame(right)
+        cb.pack(fill="x", padx=8, pady=4)
         ttk.Button(cb, text="+ Dodaj obwód", command=self._add_circuit).pack(side="left")
         ttk.Button(cb, text="Edytuj", command=self._edit_circuit).pack(side="left", padx=6)
         ttk.Button(cb, text="Usuń", command=self._del_circuit).pack(side="left")
