@@ -639,7 +639,8 @@ class ElektrykaApp:
             if only and pick and (link.circuit_id != pick): continue
             a = idx[link.a_id]
             color = self._circuit_color_hex(link.circuit_id)
-            if link.b_id in idx:
+            same_room_target = (not link.b_room) or (link.b_room == room.name)
+            if same_room_target and (link.b_id in idx):
                 b = idx[link.b_id]
                 self.canvas.create_line(a.x, a.y, b.x, b.y, fill=color, width=3, arrow="last")
             else:
