@@ -246,6 +246,7 @@ class ElektrykaApp(tk.Tk):
     # --- RENDER ---
     def _redraw(self):
         self.canvas.delete("all")
+        self._id_to_model.clear()
         w = self.canvas.winfo_width()
         h = self.canvas.winfo_height()
         if self._grid_on.get():
