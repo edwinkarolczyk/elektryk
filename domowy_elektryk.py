@@ -35,7 +35,7 @@ def is_mcb(code:str)->bool:
 WEIGHTS_DEFAULT = {"gniazd":2, "agd":3, "łazien":3, "lazien":3, "kuch":3, "oświet":1, "oswiet":1, "garaż":2, "garaz":2}
 WEIGHT_FALLBACK = 2
 MAX_MCB_PER_RCD_DEFAULT = 6
-KITCHEN_PER_RCD_LIMIT_DEFAULT = 3  # <= to dodałeś
+KITCHEN_PER_RCD_LIMIT_DEFAULT = 3  # maximum kitchen circuits allowed per RCD
 
 # ------------ MODELE ------------
 @dataclass
