@@ -1,5 +1,5 @@
-from typing import Optional, List
-from .models import Project, Element, Board, Cable, Circuit
+from typing import Optional
+from .models import Project, Element, Board, Circuit
 
 ET_COLORS = {
     "GNIAZDKO": "#1f77b4",
@@ -9,13 +9,7 @@ ET_COLORS = {
     "ROZDZIELNICA": "#111111",
 }
 
-ET_SHORT = {
-    "GNIAZDKO": "G",
-    "LAMPA": "L",
-    "ROLETY": "R",
-    "WLACZNIK": "W",
-    "ROZDZIELNICA": "RG",
-}
+ET_SHORT = {"GNIAZDKO":"G","LAMPA":"L","ROLETY":"R","WLACZNIK":"W","ROZDZIELNICA":"RG"}
 
 def next_symbol(project: Project, etype: str) -> str:
     prefix = ET_SHORT.get(etype, "X")
@@ -24,24 +18,12 @@ def next_symbol(project: Project, etype: str) -> str:
         if e.etype == etype and "-" in e.name:
             try:
                 used.append(int(e.name.split("-")[-1]))
-            except: ...
+            except Exception:
+                pass
     n = 1
     while n in used:
         n += 1
-    if etype == "ROZDZIELNICA":
-        return f"RG-{n}"
-    return f"{prefix}-{n:02d}"
-
-def find_board(project: Project, board_name: str) -> Optional[Board]:
-    for b in project.boards:
-        if b.name == board_name:
-            return b
-    return None
-
-def validate_single_line(points: List[tuple]) -> List[tuple]:
-    if len(points) > 12:
-        return points[:12]
-    return points
+    return f"RG-{n}" if etype == "ROZDZIELNICA" else f"{prefix}-{n:02d}"
 
 def circuit_of_element(project: Project, el: Element) -> Optional[Circuit]:
     if not el.circuit_id:
@@ -51,3 +33,14 @@ def circuit_of_element(project: Project, el: Element) -> Optional[Circuit]:
             if c.id == el.circuit_id:
                 return c
     return None
+
+def find_board(project: Project, name: str) -> Optional[Board]:
+    for b in project.boards:
+        if b.name == name:
+            return b
+    return None
+
+def clamp(v, a, b):
+    return max(a, min(b, v))
+
+# ⏹ KONIEC KODU

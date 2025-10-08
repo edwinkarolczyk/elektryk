@@ -1,16 +1,26 @@
 {
   "id": "seed-proj",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Domowy Elektryk — Projekt",
   "boards": [
     {
       "id": "BRD-seed",
       "name": "RG-1",
       "location": "Korytarz",
+      "rows": 8,
+      "cols": 18,
       "circuits": [
         { "id": "CIR-01", "name": "O1 Gniazda Salon", "breaker": "B16", "rcd": "30mA", "color": "#1256ff", "enabled": true, "load_va": 0 },
         { "id": "CIR-02", "name": "O2 Oświetlenie Parter", "breaker": "B10", "rcd": null, "color": "#ff7f0e", "enabled": true, "load_va": 0 },
         { "id": "CIR-03", "name": "O3 Rolety", "breaker": "B16", "rcd": "30mA", "color": "#2ca02c", "enabled": true, "load_va": 0 }
+      ],
+      "modules": [
+        { "id": "MOD-0001", "kind": "MAIN", "label": "FR",   "poles": 2, "row": 0, "col": 0, "color": "#333333", "circuit_id": null },
+        { "id": "MOD-0002", "kind": "RCD",  "label": "30mA", "poles": 2, "row": 0, "col": 2, "color": "#00897b", "circuit_id": null },
+        { "id": "MOD-0003", "kind": "MCB",  "label": "B16 O1","poles": 1, "row": 0, "col": 4, "color": "#1256ff", "circuit_id": "CIR-01" },
+        { "id": "MOD-0004", "kind": "MCB",  "label": "B10 O2","poles": 1, "row": 0, "col": 5, "color": "#ff7f0e", "circuit_id": "CIR-02" },
+        { "id": "MOD-0005", "kind": "MCB",  "label": "B16 O3","poles": 1, "row": 0, "col": 6, "color": "#2ca02c", "circuit_id": "CIR-03" },
+        { "id": "MOD-0006", "kind": "SPD",  "label": "SPD",  "poles": 2, "row": 0, "col": 8, "color": "#6d4c41", "circuit_id": null }
       ]
     }
   ],
