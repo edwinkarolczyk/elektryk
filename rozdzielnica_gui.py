@@ -394,24 +394,36 @@ class RozdzielnicaApp(tk.Tk):
     # ---------- Inne ----------
     def _apply_layout(self):
         choice = self.cmb_layout.get()
+        old_rows, old_cols = self.rows, self.cols
+        new_rows, new_cols = old_rows, old_cols
+
         if choice == "2×12":
-            self.rows, self.cols = 2, 12
+            new_rows, new_cols = 2, 12
         elif choice == "3×18":
-            self.rows, self.cols = 3, 18
+            new_rows, new_cols = 3, 18
         elif choice == "1×12":
-            self.rows, self.cols = 1, 12
+            new_rows, new_cols = 1, 12
         else:
             # własny
             try:
                 r = simpledialog.askinteger("Układ", "Liczba rzędów:", minvalue=1, maxvalue=8, initialvalue=self.rows)
                 c = simpledialog.askinteger("Układ", "Liczba kolumn:", minvalue=4, maxvalue=36, initialvalue=self.cols)
-                if not r or not c: return
-                self.rows, self.cols = r, c
+                if r is None or c is None:
+                    return
+                new_rows, new_cols = r, c
             except:
                 return
-        # po zmianie układu: wyczyść moduły (albo spróbuj przenieść? na razie prosto)
-        if self.modules and not messagebox.askyesno("Układ", "Zmiana układu usunie bieżący układ aparatów. Kontynuować?"):
+
+        if new_rows == old_rows and new_cols == old_cols:
             return
+
+        if self.modules and not messagebox.askyesno(
+            "Układ",
+            "Zmiana układu usunie bieżący układ aparatów. Kontynuować?",
+        ):
+            return
+
+        self.rows, self.cols = new_rows, new_cols
         self.modules.clear()
         self.draw_board()
 
