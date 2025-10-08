@@ -25,7 +25,7 @@ class Element:
 @dataclass
 class Circuit:
     id: str
-    name: str       # np. B16/O1 „Gniazda salon”
+    name: str       # np. O1 Gniazda Salon
     breaker: str    # np. B16, B10, C20
     rcd: Optional[str] = None  # np. 30mA
     color: str = "#000000"
@@ -45,12 +45,12 @@ class Cable:
     a_element_id: str
     b_element_id: str
     kind: str = "YDYp 3x1.5"
-    points: List[Tuple[int, int]] = field(default_factory=list)  # jedna linia (polyline), ale traktowana jako „jedna trasa”
+    points: List[Tuple[int, int]] = field(default_factory=list)  # jedna linia (polyline) jako „jedna trasa”
 
 @dataclass
 class Project:
     id: str
-    version: str = "1.0.0"
+    version: str = "1.1.0"
     name: str = "Domowy Elektryk — Projekt"
     boards: List[Board] = field(default_factory=list)
     elements: List[Element] = field(default_factory=list)

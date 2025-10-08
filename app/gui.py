@@ -3,14 +3,14 @@ from tkinter import ttk, messagebox, simpledialog
 from typing import Optional
 from .store import load_project, save_project
 from .models import Element, Cable, Board, Circuit, Project
-from .board_logic import ET_COLORS, next_symbol, validate_single_line
+from .board_logic import ET_COLORS, next_symbol, validate_single_line, circuit_of_element
 
 CANVAS_W, CANVAS_H = 1024, 576
 
 class ElektrykaApp(ttk.Frame):
     def __init__(self, master):
         super().__init__(master)
-        self.master.title("Domowy Elektryk — v1.0.0")
+        self.master.title("Domowy Elektryk — v1.1.0")
         self.pack(fill="both", expand=True)
         self.project: Project = load_project()
 
@@ -147,10 +147,20 @@ class ElektrykaApp(ttk.Frame):
     # ---------------- Plan / Canvas ----------------
     def _draw_canvas(self):
         self.canvas.delete("all")
-        # kable
+        # kable (kolor wg obwodu A lub B, jak brak — czarny)
         for cab in self.project.cables:
+            color = "#000000"
+            a = self._by_id(cab.a_element_id)
+            b = self._by_id(cab.b_element_id)
+            for el in (a, b):
+                if not el:
+                    continue
+                circ = circuit_of_element(self.project, el)
+                if circ and circ.color:
+                    color = circ.color
+                    break
             if cab.points:
-                self.canvas.create_line(*sum(cab.points, ()), width=2, smooth=True)
+                self.canvas.create_line(*sum(cab.points, ()), width=2, smooth=True, fill=color)
         # elementy
         for e in self.project.elements:
             color = ET_COLORS.get(e.etype, "#000")

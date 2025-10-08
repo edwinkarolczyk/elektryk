@@ -1,5 +1,5 @@
 from typing import Optional, List
-from .models import Project, Element, Board, Cable
+from .models import Project, Element, Board, Cable, Circuit
 
 ET_COLORS = {
     "GNIAZDKO": "#1f77b4",
@@ -39,7 +39,15 @@ def find_board(project: Project, board_name: str) -> Optional[Board]:
     return None
 
 def validate_single_line(points: List[tuple]) -> List[tuple]:
-    # Upraszczamy trasę do odcinków łamanych: max 12 punktów, traktowanych jako „jedna linia”
     if len(points) > 12:
         return points[:12]
     return points
+
+def circuit_of_element(project: Project, el: Element) -> Optional[Circuit]:
+    if not el.circuit_id:
+        return None
+    for b in project.boards:
+        for c in b.circuits:
+            if c.id == el.circuit_id:
+                return c
+    return None
