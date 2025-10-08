@@ -1,0 +1,26 @@
+{
+  "id": "seed-proj",
+  "version": "1.0.0",
+  "name": "Domowy Elektryk — Projekt",
+  "boards": [
+    {
+      "id": "BRD-seed",
+      "name": "RG-1",
+      "location": "Korytarz",
+      "circuits": [
+        { "id": "CIR-01", "name": "O1 Gniazda Salon", "breaker": "B16", "rcd": "30mA", "color": "#1256ff", "enabled": true, "load_va": 0 },
+        { "id": "CIR-02", "name": "O2 Oświetlenie Parter", "breaker": "B10", "rcd": null, "color": "#ff7f0e", "enabled": true, "load_va": 0 },
+        { "id": "CIR-03", "name": "O3 Rolety", "breaker": "B16", "rcd": "30mA", "color": "#2ca02c", "enabled": true, "load_va": 0 }
+      ]
+    }
+  ],
+  "elements": [
+    { "id": "EL-0001", "etype": "ROZDZIELNICA", "name": "RG-1", "x": 80, "y": 300, "room": null, "notes": "", "circuit_id": null },
+    { "id": "EL-0002", "etype": "GNIAZDKO", "name": "G-01", "x": 380, "y": 300, "room": null, "notes": "", "circuit_id": "CIR-01" },
+    { "id": "EL-0003", "etype": "LAMPA", "name": "L-01", "x": 620, "y": 160, "room": null, "notes": "", "circuit_id": "CIR-02" },
+    { "id": "EL-0004", "etype": "WLACZNIK", "name": "W-01", "x": 480, "y": 320, "room": null, "notes": "", "circuit_id": "CIR-02" },
+    { "id": "EL-0005", "etype": "ROLETY", "name": "R-01", "x": 750, "y": 320, "room": null, "notes": "", "circuit_id": "CIR-03" }
+  ],
+  "cables": [],
+  "meta": { "created": 0, "updated": 0 }
+}
