@@ -26,7 +26,7 @@ def load_project() -> Project:
     # prosty parser
     proj = Project(
         id=raw.get("id","proj-0001"),
-        version=raw.get("version","1.0.0"),
+        version=raw.get("version","1.1.0"),
         name=raw.get("name","Domowy Elektryk — Projekt"),
     )
     # boards
