@@ -6,6 +6,8 @@
 # -----------------------------------------
 
 import sys, json, os
+from elektryk_report import generate_all_reports
+from elektryk_icons import icon_label
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsRectItem,
     QGraphicsItem, QGraphicsTextItem, QFileDialog, QMessageBox,
@@ -158,7 +160,7 @@ class ElektrykApp(QMainWindow):
             self.add_obwod()
             obwod = self.obwody[-1]["nazwa"]
 
-        el = ElektrykElement(typ, 50 + len(self.elements)*40, 50 + len(self.elements)*20, obwod)
+        el = ElektrykElement(icon_label(typ), 50 + len(self.elements)*40, 50 + len(self.elements)*20, obwod)
         self.scene.addItem(el)
         self.elements.append(el)
 
@@ -199,15 +201,8 @@ class ElektrykApp(QMainWindow):
     # Raport TXT
     # ---------------------------
     def export_report(self):
-        raport = "RAPORT INSTALACJI ELEKTRYCZNEJ\n============================\n\n"
-        for obw in self.obwody:
-            raport += f"Obwód: {obw['nazwa']}\n"
-            raport += f"Zabezpieczenie: {obw['zabezpieczenie']}\n"
-            el_count = len([e for e in self.elements if e.obwod == obw['nazwa']])
-            raport += f"Liczba elementów: {el_count}\n\n"
-        with open(os.path.join(DATA_DIR, "raport.txt"), "w", encoding="utf-8") as f:
-            f.write(raport)
-        QMessageBox.information(self, "Raport", "Zapisano raport.txt w folderze data.")
+        msg = generate_all_reports(self.obwody, self.elements, getattr(self, "rcd_groups", None))
+        QMessageBox.information(self, "Raporty", msg)
 
     # ---------------------------
     # Zamknięcie programu
