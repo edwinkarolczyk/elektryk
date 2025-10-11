@@ -266,7 +266,9 @@ class ElektrykaApp(ttk.Frame):
             return x, y
         gx = round(x / self.grid_size) * self.grid_size
         gy = round(y / self.grid_size) * self.grid_size
-        return int(gx), int(gy)
+        gx = clamp(int(gx), 0, CANVAS_W)
+        gy = clamp(int(gy), 0, CANVAS_H)
+        return gx, gy
 
     def _toggle_grid(self):
         self.show_grid = bool(self.var_show_grid.get())
