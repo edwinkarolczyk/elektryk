@@ -6,6 +6,7 @@ from .models import Element, Cable, Board, Circuit, Project, Module
 from .board_logic import ET_COLORS, next_symbol, circuit_of_element, clamp
 
 CANVAS_W, CANVAS_H = 1024, 576
+GRID_SIZE = 40
 
 # Paleta aparatów (typ → (domyślna etykieta, polary/pola, kolor))
 MODULE_PALETTE = {
@@ -23,6 +24,10 @@ class ElektrykaApp(ttk.Frame):
         self.master.title("Domowy Elektryk — v1.2.0")
         self.pack(fill="both", expand=True)
         self.project: Project = load_project()
+
+        self.snap_to_grid = True
+        self.show_grid = True
+        self.grid_size = GRID_SIZE
 
         self._build_ui()
         self._refresh_all()
@@ -51,6 +56,12 @@ class ElektrykaApp(ttk.Frame):
         for et in ["GNIAZDKO","LAMPA","ROLETY","WLACZNIK","ROZDZIELNICA"]:
             ttk.Radiobutton(left, text=et.title(), value=et, variable=self.var_et).pack(anchor="w", padx=8)
         ttk.Button(left, text="Dodaj na środek", command=self._add_element_center).pack(pady=8)
+        self.var_show_grid = tk.BooleanVar(value=self.show_grid)
+        self.var_snap = tk.BooleanVar(value=self.snap_to_grid)
+        ttk.Checkbutton(left, text="Pokaż siatkę", variable=self.var_show_grid,
+                        command=self._toggle_grid).pack(anchor="w", padx=8)
+        ttk.Checkbutton(left, text="Przyciągaj do siatki", variable=self.var_snap,
+                        command=self._toggle_snap).pack(anchor="w", padx=8, pady=(0, 8))
         ttk.Separator(left).pack(fill="x", pady=6)
         ttk.Button(left, text="Zapisz projekt", command=self._save).pack(pady=4)
 
@@ -68,6 +79,7 @@ class ElektrykaApp(ttk.Frame):
         ttk.Button(btns, text="Usuń", command=self._delete_selected).grid(row=0, column=1, padx=2)
 
         self.status = ttk.Label(self.tab_plan, text="Gotowe", anchor="w"); self.status.pack(fill="x", side="bottom")
+        self._update_status()
 
         self.dragging_id: Optional[str] = None
         self.connect_a: Optional[str] = None
@@ -134,6 +146,12 @@ class ElektrykaApp(ttk.Frame):
 
     def _draw_plan(self):
         self.canvas.delete("all")
+        if self.show_grid and self.grid_size > 0:
+            step = self.grid_size
+            for x in range(0, CANVAS_W + 1, step):
+                self.canvas.create_line(x, 0, x, CANVAS_H, fill="#eeeeee")
+            for y in range(0, CANVAS_H + 1, step):
+                self.canvas.create_line(0, y, CANVAS_W, y, fill="#eeeeee")
         # kable
         for cab in self.project.cables:
             color = "#000000"
@@ -174,7 +192,7 @@ class ElektrykaApp(ttk.Frame):
         if self.dragging_id:
             e = self._by_id(self.dragging_id)
             if e:
-                e.x, e.y = ev.x, ev.y
+                e.x, e.y = self._snap(ev.x, ev.y)
                 self._draw_plan()
         elif self.temp_line is not None:
             self.poly_points.append((ev.x, ev.y))
@@ -182,7 +200,13 @@ class ElektrykaApp(ttk.Frame):
 
     def _on_canvas_drop(self, ev):
         if self.dragging_id:
+            moving_id = self.dragging_id
             self.dragging_id = None
+            if self.snap_to_grid:
+                e = self._by_id(moving_id)
+                if e:
+                    e.x, e.y = self._snap(e.x, e.y)
+            self._draw_plan()
             self._save()
         elif self.temp_line is not None:
             e = self._find_element_at(ev.x, ev.y)
@@ -204,6 +228,7 @@ class ElektrykaApp(ttk.Frame):
         et = self.var_et.get()
         name = next_symbol(self.project, et)
         el = Element(id=f"EL-{len(self.project.elements)+1:04d}", etype=et, name=name, x=CANVAS_W//2, y=CANVAS_H//2)
+        el.x, el.y = self._snap(el.x, el.y)
         self.project.elements.append(el)
         self._refresh_all(); self._save()
 
@@ -235,6 +260,34 @@ class ElektrykaApp(ttk.Frame):
         for e in self.project.elements:
             if e.name == name: return e
         return None
+
+    def _snap(self, x: int, y: int) -> Tuple[int, int]:
+        if not self.snap_to_grid or self.grid_size <= 0:
+            return x, y
+        gx = round(x / self.grid_size) * self.grid_size
+        gy = round(y / self.grid_size) * self.grid_size
+        return int(gx), int(gy)
+
+    def _toggle_grid(self):
+        self.show_grid = bool(self.var_show_grid.get())
+        self._draw_plan()
+        self._update_status()
+
+    def _toggle_snap(self):
+        self.snap_to_grid = bool(self.var_snap.get())
+        if self.snap_to_grid:
+            for e in self.project.elements:
+                e.x, e.y = self._snap(e.x, e.y)
+            self._draw_plan()
+            self._save()
+        self._update_status()
+
+    def _update_status(self, text: Optional[str] = None):
+        if not hasattr(self, "status"):
+            return
+        if text is None:
+            text = f"Siatka: {'ON' if self.show_grid else 'OFF'}  |  Przyciąganie: {'ON' if self.snap_to_grid else 'OFF'}"
+        self.status.config(text=text)
 
     def _by_id(self, _id: str):
         for e in self.project.elements:
