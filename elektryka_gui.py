@@ -41,6 +41,8 @@ from typing import Dict, List, Tuple, Optional
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, simpledialog
 
+from ui_rozdzielnica import RozdzielnicaUI
+
 # Pillow jest opcjonalny (ładniejszy PNG)
 try:
     from PIL import Image, EpsImagePlugin
@@ -133,6 +135,8 @@ class ElektrykaApp(tk.Tk):
         self.geometry("1200x800")
 
         self.projekt = Projekt(narzedzia=[], linie=[], rozdzielnica=[], counters={"G":0,"L":0,"R":0,"W":0})
+        self.obwody = self.projekt.rozdzielnica
+        self.rcd_groups: Dict[str, List[int]] = {}
 
         self._current_mode = tk.StringVar(value="G")  # G/L/R/W/LINIA
         self._grid_on = tk.BooleanVar(value=True)
@@ -144,6 +148,7 @@ class ElektrykaApp(tk.Tk):
         self._id_to_model: Dict[int,Tuple[str,str]] = {}  # canvas_id -> ("E"/"L", model.id)
 
         self._build_ui()
+        self._update_rcd_summary()
         self._bind_shortcuts()
         self._refresh_status()
 
@@ -199,6 +204,7 @@ class ElektrykaApp(tk.Tk):
         ttk.Button(top_r, text="Dodaj obwód", command=self._obwod_dodaj).pack(side="left", padx=4)
         ttk.Button(top_r, text="Edytuj", command=self._obwod_edytuj).pack(side="left", padx=4)
         ttk.Button(top_r, text="Usuń", command=self._obwod_usun).pack(side="left", padx=4)
+        ttk.Button(top_r, text="Grupy RCD…", command=self.open_rozdzielnica).pack(side="left", padx=(16,4))
 
         cols=("nr","opis","zabezp","przewod","uwagi")
         tv = ttk.Treeview(rframe, columns=cols, show="headings", height=12)
@@ -206,6 +212,9 @@ class ElektrykaApp(tk.Tk):
             tv.heading(c, text=txt); tv.column(c, width=w, anchor="w")
         tv.grid(row=1,column=0, sticky="nsew")
         self._tv_obw = tv
+
+        self._lbl_rcd = ttk.Label(rframe, text="Grupy RCD: brak", anchor="w")
+        self._lbl_rcd.grid(row=2, column=0, sticky="ew", pady=(6,0))
 
         # Zakładka Plik/Ustawienia (prosto)
         pframe = ttk.Frame(nb, padding=10)
@@ -430,6 +439,14 @@ class ElektrykaApp(tk.Tk):
         self._redraw()
 
     # --- ROZDZIELNICA ---
+    def open_rozdzielnica(self):
+        dlg = RozdzielnicaUI(self.obwody, parent=self, initial_groups=self.rcd_groups)
+        if dlg.exec():
+            self.rcd_groups = dlg.get_groups()
+            summary = self._update_rcd_summary()
+            if summary:
+                self._status.set(summary)
+
     def _obwod_dodaj(self):
         nr = simpledialog.askstring("Obwód", "Nr/oznaczenie (np. B16/1):", parent=self) or ""
         opis = simpledialog.askstring("Obwód", "Opis (np. Gniazda kuchnia):", parent=self) or ""
@@ -462,6 +479,44 @@ class ElektrykaApp(tk.Tk):
         self._tv_obw.delete(*self._tv_obw.get_children())
         for idx,o in enumerate(self.projekt.rozdzielnica):
             self._tv_obw.insert("", "end", iid=str(idx), values=(o.nr,o.opis,o.zabezp,o.przewod,o.uwagi))
+        self._update_rcd_summary()
+
+    def _update_rcd_summary(self) -> str:
+        if not hasattr(self, "_lbl_rcd"):
+            return ""
+        cleaned: Dict[str, List[int]] = {}
+        for name, idxs in self.rcd_groups.items():
+            valid = [i for i in idxs if 0 <= i < len(self.obwody)]
+            if valid:
+                cleaned[name] = valid
+        self.rcd_groups = cleaned
+
+        if not self.rcd_groups:
+            text = "Grupy RCD: brak"
+            self._lbl_rcd.config(text=text)
+            return text
+
+        parts: List[str] = []
+        for name, idxs in self.rcd_groups.items():
+            labels: List[str] = []
+            for idx in idxs:
+                if 0 <= idx < len(self.obwody):
+                    obw = self.obwody[idx]
+                    label_bits = []
+                    if obw.nr:
+                        label_bits.append(obw.nr)
+                    if obw.opis:
+                        label_bits.append(obw.opis)
+                    label = " ".join(label_bits).strip()
+                    if not label:
+                        label = f"Obwód {idx+1}"
+                    labels.append(label)
+            if labels:
+                parts.append(f"{name}: {', '.join(labels)}")
+
+        text = "Grupy RCD: " + " | ".join(parts) if parts else "Grupy RCD: brak"
+        self._lbl_rcd.config(text=text)
+        return text
 
     # --- SŁOWNICZEK ---
     def _slownik_dodaj(self):
@@ -479,6 +534,8 @@ class ElektrykaApp(tk.Tk):
         if not self._potwierdz("Wyczyścić bieżący projekt?"):
             return
         self.projekt = Projekt(narzedzia=[], linie=[], rozdzielnica=[], counters={"G":0,"L":0,"R":0,"W":0})
+        self.obwody = self.projekt.rozdzielnica
+        self.rcd_groups = {}
         self._nr_hali.set("1")
         self._obwod_refresh()
         self._redraw()
@@ -499,6 +556,8 @@ class ElektrykaApp(tk.Tk):
                 data=json.load(f)
             pj = Projekt.from_json(data)
             self.projekt = pj
+            self.obwody = self.projekt.rozdzielnica
+            self.rcd_groups = {}
             self._nr_hali.set(pj.nr_hali)
             self._obwod_refresh()
             self._redraw()
