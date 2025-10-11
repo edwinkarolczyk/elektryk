@@ -14,38 +14,108 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QWidget, QListWidget, QPushButton, QHBoxLayout, QLabel,
     QInputDialog, QDialog, QComboBox, QFormLayout, QLineEdit, QTextEdit
 )
-from PyQt6.QtGui import QPen, QColor, QBrush
-from PyQt6.QtCore import Qt, QRectF
+from PyQt6.QtGui import QPen, QColor, QBrush, QAction
+from PyQt6.QtCore import Qt, QRectF, QPointF
 
 # -------------------------------
 # Stałe i ścieżki
 # -------------------------------
 DATA_DIR = "data"
-if not os.path.exists(DATA_DIR): os.makedirs(DATA_DIR)
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
 PROJECT_PATH = os.path.join(DATA_DIR, "projekt_domowy.json")
+
+OBWOD_COLORS = [
+    "#1976d2",
+    "#43a047",
+    "#f4511e",
+    "#8e24aa",
+    "#00897b",
+    "#5d4037",
+    "#3949ab",
+    "#fdd835",
+]
 
 # -------------------------------
 # Klasy pomocnicze
 # -------------------------------
 class ElektrykElement(QGraphicsRectItem):
-    def __init__(self, typ, x, y, obwod=None):
-        super().__init__(0, 0, 30, 30)
-        self.typ = typ
+    def __init__(
+        self,
+        typ,
+        x,
+        y,
+        obwod=None,
+        kolor="#e0e0e0",
+        nr=None,
+        grid_size=20,
+        snap_enabled=True,
+    ):
+        super().__init__(0, 0, 34, 34)
+        self.typ = self._normalize_type(typ)
+        self.base_type = self.typ
         self.obwod = obwod
+        self.kolor = kolor
+        self.nr = nr or ""
+        self.grid_size = grid_size
+        self.snap_enabled = snap_enabled
         self.setPos(x, y)
-        self.setBrush(QBrush(QColor("#e0e0e0")))
+        self.setBrush(QBrush(QColor(self.kolor)))
+        self.setPen(QPen(Qt.GlobalColor.black))
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
-        self.text = QGraphicsTextItem(self.typ, self)
+        self.text = QGraphicsTextItem("", self)
         self.text.setDefaultTextColor(Qt.GlobalColor.black)
-        self.text.setPos(5, 5)
+        self.text.setPos(2, 4)
+        self.setZValue(1)
+        self._update_label()
+
+    @staticmethod
+    def _normalize_type(typ):
+        if typ in ICON_MAP:
+            return typ
+        for key in ICON_MAP:
+            if key and key in typ:
+                return key
+        return typ
+
+    def _compose_label(self):
+        label = icon_label(self.typ) if self.typ in ICON_MAP else str(self.typ)
+        if self.nr:
+            label = f"{label}\n{self.nr}"
+        return label
+
+    def _tooltip(self):
+        lines = [icon_label(self.typ) if self.typ in ICON_MAP else str(self.typ)]
+        if self.nr:
+            lines.append(f"Nr: {self.nr}")
+        if self.obwod:
+            lines.append(f"Obwód: {self.obwod}")
+        return "\n".join(lines)
+
+    def _update_label(self):
+        self.text.setPlainText(self._compose_label())
+        self.setToolTip(self._tooltip())
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self.snap_enabled:
+            snapped = self._snap_point(value)
+            return snapped
+        return super().itemChange(change, value)
+
+    def _snap_point(self, point):
+        x = round(point.x() / self.grid_size) * self.grid_size
+        y = round(point.y() / self.grid_size) * self.grid_size
+        return QPointF(x, y)
 
     def to_dict(self):
         return {
             "typ": self.typ,
             "x": self.x(),
             "y": self.y(),
-            "obwod": self.obwod
+            "obwod": self.obwod,
+            "kolor": self.kolor,
+            "nr": self.nr,
         }
 
 # -------------------------------
@@ -85,12 +155,20 @@ class ElektrykApp(QMainWindow):
         self.view.setRenderHint(self.view.renderHints())
         self.view.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         self.scene.setBackgroundBrush(QBrush(QColor("#f9f9f9")))
+        self.scene.setSceneRect(QRectF(0, 0, 1600, 1000))
 
+        self.grid_size = 40
+        self.snap_to_grid = True
+        self.grid_lines = []
         self.obwody = []
         self.elements = []
+        self.rcd_groups = []
 
+        self._create_menu()
         self._init_ui()
+        self._draw_grid()
         self._load_project()
+        self.statusBar().showMessage("Gotowe", 0)
 
     # ---------------------------
     # UI
@@ -128,13 +206,49 @@ class ElektrykApp(QMainWindow):
         main_widget.setLayout(layout)
         self.setCentralWidget(main_widget)
 
+    def _create_menu(self):
+        bar = self.menuBar()
+        view_menu = bar.addMenu("Widok")
+        self.action_snap = QAction("Przyciągaj do siatki", self)
+        self.action_snap.setCheckable(True)
+        self.action_snap.setChecked(True)
+        self.action_snap.toggled.connect(self.toggle_snap)
+        view_menu.addAction(self.action_snap)
+
+    def _draw_grid(self):
+        for line in self.grid_lines:
+            self.scene.removeItem(line)
+        self.grid_lines = []
+        pen = QPen(QColor("#e0e0e0"))
+        pen.setCosmetic(True)
+        rect = self.scene.sceneRect()
+        width = int(rect.width())
+        height = int(rect.height())
+        for x in range(0, width + 1, self.grid_size):
+            line = self.scene.addLine(x, 0, x, height, pen)
+            line.setZValue(-10)
+            line.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+            self.grid_lines.append(line)
+        for y in range(0, height + 1, self.grid_size):
+            line = self.scene.addLine(0, y, width, y, pen)
+            line.setZValue(-10)
+            line.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+            self.grid_lines.append(line)
+
     # ---------------------------
     # Dodawanie obwodów
     # ---------------------------
     def add_obwod(self):
         nazwa, ok = QInputDialog.getText(self, "Nowy obwód", "Podaj nazwę obwodu:")
         if ok and nazwa:
-            nowy = {"nazwa": nazwa, "przekroj": "3x2,5", "dlugosc": 0, "zabezpieczenie": "B16"}
+            kolor = OBWOD_COLORS[len(self.obwody) % len(OBWOD_COLORS)]
+            nowy = {
+                "nazwa": nazwa,
+                "przekroj": "3x2,5",
+                "dlugosc": 0,
+                "zabezpieczenie": "B16",
+                "kolor": kolor,
+            }
             self.obwody.append(nowy)
             self.refresh_obwody()
 
@@ -159,8 +273,30 @@ class ElektrykApp(QMainWindow):
         if obwod == "➕ Nowy obwód":
             self.add_obwod()
             obwod = self.obwody[-1]["nazwa"]
-
-        el = ElektrykElement(icon_label(typ), 50 + len(self.elements)*40, 50 + len(self.elements)*20, obwod)
+        kolor = self._color_for_obwod(obwod)
+        prefix = {
+            "Gniazdko": "G",
+            "Lampa": "L",
+            "Rozdzielnica": "R",
+            "Włącznik": "W",
+        }.get(typ, typ[:1].upper())
+        existing = sum(1 for e in self.elements if self._element_base_type(e) == typ)
+        nr = f"{prefix}-{existing + 1:02d}"
+        base_x = 120 + len(self.elements) * 36
+        base_y = 120 + len(self.elements) * 24
+        if self.snap_to_grid:
+            snapped = self._snap_point(QPointF(base_x, base_y))
+            base_x, base_y = snapped.x(), snapped.y()
+        el = ElektrykElement(
+            typ,
+            base_x,
+            base_y,
+            obwod,
+            kolor=kolor,
+            nr=nr,
+            grid_size=self.grid_size,
+            snap_enabled=self.snap_to_grid,
+        )
         self.scene.addItem(el)
         self.elements.append(el)
 
@@ -189,14 +325,25 @@ class ElektrykApp(QMainWindow):
                 with open(PROJECT_PATH, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 self.obwody = data.get("obwody", [])
+                for idx, obw in enumerate(self.obwody):
+                    if "kolor" not in obw:
+                        obw["kolor"] = OBWOD_COLORS[idx % len(OBWOD_COLORS)]
+                self.refresh_obwody()
                 for e in data.get("elementy", []):
                     typ = e.get("typ", "Element")
-                    if typ in ICON_MAP:
-                        typ = icon_label(typ)
-                    el = ElektrykElement(typ, e["x"], e["y"], e.get("obwod"))
+                    kolor = e.get("kolor", self._color_for_obwod(e.get("obwod")))
+                    el = ElektrykElement(
+                        typ,
+                        e["x"],
+                        e["y"],
+                        e.get("obwod"),
+                        kolor=kolor,
+                        nr=e.get("nr"),
+                        grid_size=self.grid_size,
+                        snap_enabled=self.snap_to_grid,
+                    )
                     self.scene.addItem(el)
                     self.elements.append(el)
-                self.refresh_obwody()
             except Exception as ex:
                 print("Błąd wczytania projektu:", ex)
 
@@ -204,7 +351,7 @@ class ElektrykApp(QMainWindow):
     # Raport TXT
     # ---------------------------
     def export_report(self):
-        msg = generate_all_reports(self.obwody, self.elements, getattr(self, "rcd_groups", None))
+        msg = generate_all_reports(self.obwody, self.elements, self.rcd_groups)
         QMessageBox.information(self, "Raporty", msg)
 
     # ---------------------------
@@ -213,6 +360,41 @@ class ElektrykApp(QMainWindow):
     def closeEvent(self, event):
         self._save_project()
         event.accept()
+
+    def _color_for_obwod(self, obwod):
+        for idx, item in enumerate(self.obwody):
+            if item["nazwa"] == obwod:
+                kolor = item.get("kolor")
+                if not kolor:
+                    kolor = OBWOD_COLORS[idx % len(OBWOD_COLORS)]
+                    item["kolor"] = kolor
+                return kolor
+        return "#e0e0e0"
+
+    def _element_base_type(self, element):
+        if hasattr(element, "base_type"):
+            return element.base_type
+        typ = getattr(element, "typ", "")
+        for key in ICON_MAP:
+            if key in typ:
+                return key
+        return typ
+
+    def _snap_point(self, point: QPointF) -> QPointF:
+        x = round(point.x() / self.grid_size) * self.grid_size
+        y = round(point.y() / self.grid_size) * self.grid_size
+        return QPointF(x, y)
+
+    def toggle_snap(self, checked: bool):
+        self.snap_to_grid = bool(checked)
+        for element in self.elements:
+            element.snap_enabled = self.snap_to_grid
+            element.grid_size = self.grid_size
+            if self.snap_to_grid:
+                snapped = self._snap_point(element.pos())
+                element.setPos(snapped)
+        status = "ON" if self.snap_to_grid else "OFF"
+        self.statusBar().showMessage(f"Przyciąganie do siatki: {status}", 3000)
 
 # -------------------------------
 # Start programu
