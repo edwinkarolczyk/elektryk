@@ -7,7 +7,7 @@
 
 import sys, json, os
 from elektryk_report import generate_all_reports
-from elektryk_icons import icon_label
+from elektryk_icons import icon_label, ICON_MAP
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsRectItem,
     QGraphicsItem, QGraphicsTextItem, QFileDialog, QMessageBox,
@@ -190,7 +190,10 @@ class ElektrykApp(QMainWindow):
                     data = json.load(f)
                 self.obwody = data.get("obwody", [])
                 for e in data.get("elementy", []):
-                    el = ElektrykElement(e["typ"], e["x"], e["y"], e.get("obwod"))
+                    typ = e.get("typ", "Element")
+                    if typ in ICON_MAP:
+                        typ = icon_label(typ)
+                    el = ElektrykElement(typ, e["x"], e["y"], e.get("obwod"))
                     self.scene.addItem(el)
                     self.elements.append(el)
                 self.refresh_obwody()
