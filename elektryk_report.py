@@ -9,7 +9,8 @@ from __future__ import annotations
 import csv
 import os
 from datetime import datetime
-from typing import Iterable
+from collections.abc import Iterable as IterableABC, Mapping
+from typing import Any, Iterable
 
 try:  # Opcjonalna zależność wykorzystywana tylko do PDF
     from reportlab.lib.pagesizes import A4
@@ -43,9 +44,49 @@ def _assigned_rcd_label(obwod: str, rcd_groups: Iterable[Iterable[str]] | None) 
     if not rcd_groups:
         return "-"
 
-    for index, group in enumerate(rcd_groups, start=1):
-        if obwod in group:
-            return f"RCD-{index}"
+    def _iter_groups(groups: Any):
+        if isinstance(groups, Mapping):
+            for index, (name, members) in enumerate(groups.items(), start=1):
+                yield str(name) if name else f"RCD-{index}", members
+            return
+
+        if isinstance(groups, IterableABC):
+            for index, group in enumerate(groups, start=1):
+                label = f"RCD-{index}"
+                members: Any = group
+                if isinstance(group, Mapping):
+                    label = str(
+                        group.get("name")
+                        or group.get("label")
+                        or group.get("title")
+                        or label
+                    )
+                    members = (
+                        group.get("circuits")
+                        or group.get("obwody")
+                        or group.get("items")
+                        or group
+                    )
+                yield label, members
+
+    for label, members in _iter_groups(rcd_groups):
+        if not members:
+            continue
+        if isinstance(members, Mapping):
+            members = (
+                members.get("circuits")
+                or members.get("obwody")
+                or members.get("items")
+                or []
+            )
+        if isinstance(members, (str, bytes)):
+            candidates = [members]
+        elif isinstance(members, IterableABC):
+            candidates = members
+        else:
+            continue
+        if obwod in candidates:
+            return label
     return "-"
 
 

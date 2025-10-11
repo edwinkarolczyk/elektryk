@@ -1,188 +1,265 @@
-"""Dialog pomocniczy do zarządzania grupami RCD."""
+"""PyQt6 dialog supporting assignment of circuits to RCD groups.
+
+The previous implementation of :mod:`ui_rozdzielnica` relied on Tkinter.
+That approach did not work together with the new PyQt-based main window –
+attempting to open the dialog resulted in a runtime error because no Tk root
+window existed.  This module provides a lightweight Qt alternative with a
+similar API, returning structured information about the created RCD groups.
+"""
+
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from collections import OrderedDict
+from collections.abc import Iterable as IterableABC, Mapping
+from typing import Any, Dict, Iterable, Sequence
 
-import tkinter as tk
-from tkinter import ttk, messagebox
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 
 
-class RozdzielnicaUI:
-    """Prosty edytor grup RCD oparty o Tkinter.
+class RozdzielnicaUI(QDialog):
+    """Dialog służący do grupowania obwodów pod wspólne aparaty RCD.
 
-    Dialog pozwala przypisać każdy obwód (lista obiektów z atrybutami
-    ``nr`` oraz ``opis``) do nazwanej grupy RCD. Wynik zwracany przez
-    :meth:`get_groups` to słownik ``{nazwa_grupy: [indeksy_obwodow]}``.
+    Parameters
+    ----------
+    obwody:
+        Lista obiektów lub słowników opisujących obwody.  Każdy element
+        powinien posiadać przynajmniej nazwę (`nazwa`).
+    parent:
+        Rodzic w drzewie Qt (opcjonalny).
+    initial_groups:
+        Wstępna konfiguracja grup RCD.  Funkcja obsługuje kilka formatów:
+
+        - listę list nazw obwodów,
+        - listę słowników ``{"name": <etykieta>, "circuits": [...]}``,
+        - słownik ``{etykieta: [nazwy_obwodow]}`` lub ``{etykieta: [indeksy]}``.
     """
+
+    _PLACEHOLDER = "— brak —"
 
     def __init__(
         self,
-        obwody: List[Any],
+        obwody: Sequence[Any],
         *,
-        parent: Optional[tk.Misc] = None,
-        initial_groups: Optional[Dict[str, List[int]]] = None,
+        parent: QWidget | None = None,
+        initial_groups: Any | None = None,
     ) -> None:
-        self.obwody = obwody
-        self.parent = parent or tk._default_root  # type: ignore[attr-defined]
-        if self.parent is None:
-            raise RuntimeError("RozdzielnicaUI wymaga aktywnego okna nadrzędnego")
+        super().__init__(parent)
+        self.setWindowTitle("Grupy RCD")
+        self.resize(420, 360)
 
-        filtered: Dict[str, List[int]] = {}
-        if initial_groups:
-            for name, idxs in initial_groups.items():
-                valid = [i for i in idxs if 0 <= i < len(self.obwody)]
-                if valid:
-                    filtered[name] = valid
+        self._obwody: Sequence[Any] = obwody
+        self._initial_groups = initial_groups
+        self._combos: list[QComboBox] = []
+        self._group_names: list[str] = []
         self._prefill: Dict[int, str] = {}
-        for name, idxs in filtered.items():
-            for idx in idxs:
-                self._prefill[idx] = name
+        self._new_group_edit: QLineEdit | None = None
+        self._result_groups: list[dict[str, Any]] = []
 
-        seen: set[str] = set()
-        self._group_options: List[str] = []
-        for name in filtered.keys():
-            if name not in seen:
-                seen.add(name)
-                self._group_options.append(name)
-        if not self._group_options and self.obwody:
-            self._group_options = ["RCD 1", "RCD 2"]
-
-        self._groups: Dict[str, List[int]] = filtered
-        self._result = False
-        self._dialog: Optional[tk.Toplevel] = None
-        self._group_vars: List[tk.StringVar] = []
-        self._combo_boxes: List[ttk.Combobox] = []
-        self._entry_new_group: Optional[ttk.Entry] = None
+        self._prepare_initial_state()
+        self._build_ui()
 
     # ------------------------------------------------------------------
-    def exec(self) -> bool:
-        if not self.obwody:
-            messagebox.showinfo(
+    def exec(self) -> int:
+        if not self._obwody:
+            QMessageBox.information(
+                self.parentWidget() or self,
                 "Grupy RCD",
                 "Brak obwodów do przypisania do grup RCD.",
-                parent=self.parent,
             )
-            self._groups = {}
-            self._result = False
-            return False
-
-        self._dialog = tk.Toplevel(self.parent)
-        self._dialog.title("Grupy RCD")
-        self._dialog.transient(self.parent)
-        self._dialog.grab_set()
-        self._dialog.resizable(False, True)
-        self._dialog.protocol("WM_DELETE_WINDOW", self._on_cancel)
-
-        frm = ttk.Frame(self._dialog, padding=12)
-        frm.pack(fill="both", expand=True)
-
-        ttk.Label(
-            frm,
-            text="Wybierz grupę RCD dla każdego obwodu (puste = brak przypisania).",
-        ).pack(anchor="w")
-
-        list_frame = ttk.Frame(frm)
-        list_frame.pack(fill="both", expand=True, pady=(8, 0))
-
-        max_height = min(360, 36 * len(self.obwody) + 30)
-        canvas = tk.Canvas(list_frame, highlightthickness=0, height=max_height)
-        vscroll = ttk.Scrollbar(list_frame, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=vscroll.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        vscroll.pack(side="right", fill="y")
-
-        inner = ttk.Frame(canvas)
-        canvas.create_window((0, 0), window=inner, anchor="nw")
-        inner.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all")),
-        )
-
-        ttk.Label(inner, text="Obwód", font=("Segoe UI", 9, "bold")).grid(
-            row=0, column=0, sticky="w"
-        )
-        ttk.Label(inner, text="Grupa RCD", font=("Segoe UI", 9, "bold")).grid(
-            row=0, column=1, sticky="w", padx=(12, 0)
-        )
-
-        for row, obw in enumerate(self.obwody, start=1):
-            label = self._format_obwod(obw, row)
-            ttk.Label(inner, text=label).grid(row=row, column=0, sticky="w", pady=2)
-
-            var = tk.StringVar(value=self._prefill.get(row - 1, ""))
-            combo = ttk.Combobox(
-                inner,
-                textvariable=var,
-                values=self._combo_values(),
-                width=24,
-                state="normal",
-            )
-            combo.grid(row=row, column=1, sticky="ew", padx=(12, 0), pady=2)
-            self._group_vars.append(var)
-            self._combo_boxes.append(combo)
-
-        add_frame = ttk.Frame(frm)
-        add_frame.pack(fill="x", pady=(12, 0))
-        ttk.Label(add_frame, text="Dodaj grupę:").pack(side="left")
-        self._entry_new_group = ttk.Entry(add_frame, width=18)
-        self._entry_new_group.pack(side="left", padx=(6, 6))
-        ttk.Button(add_frame, text="Dodaj", command=self._add_group).pack(side="left")
-
-        btns = ttk.Frame(frm)
-        btns.pack(fill="x", pady=(12, 0))
-        ttk.Button(btns, text="Anuluj", command=self._on_cancel).pack(
-            side="right", padx=4
-        )
-        ttk.Button(btns, text="Zapisz", command=self._on_save).pack(
-            side="right", padx=4
-        )
-
-        self._dialog.bind("<Return>", lambda _e: self._on_save())
-        self._dialog.bind("<Escape>", lambda _e: self._on_cancel())
-
-        self.parent.wait_window(self._dialog)
-        return self._result
+            self._result_groups = []
+            return int(QDialog.DialogCode.Rejected)
+        return super().exec()
 
     # ------------------------------------------------------------------
-    def get_groups(self) -> Dict[str, List[int]]:
-        return self._groups
+    def get_groups(self) -> list[dict[str, Any]]:
+        """Zwróć informacje o grupach RCD.
+
+        Każdy element listy ma postać ``{"name": <nazwa>, "circuits": [...]}``.
+        Taka struktura jest prosta do serializacji, a jednocześnie łatwa do
+        przetworzenia podczas generowania raportów.
+        """
+
+        return self._result_groups
 
     # ------------------------------------------------------------------
-    def _combo_values(self) -> tuple[str, ...]:
-        return ("", *self._group_options)
+    def _prepare_initial_state(self) -> None:
+        """Przygotuj listę dostępnych grup oraz prefille dla combo boxów."""
 
-    def _format_obwod(self, obw: Any, idx: int) -> str:
-        nr = getattr(obw, "nr", "")
-        opis = getattr(obw, "opis", "")
-        label = " ".join(part for part in (nr, opis) if part).strip()
-        return label or f"Obwód {idx}"
+        names = [self._obwod_name(obw) for obw in self._obwody]
 
+        def _ensure_group_name(name: str | None, position: int) -> str:
+            label = name or f"RCD {position}"
+            if label not in self._group_names:
+                self._group_names.append(label)
+            return label
+
+        groups = self._initial_groups
+        if isinstance(groups, Mapping):
+            for idx, (name, members) in enumerate(groups.items(), start=1):
+                label = _ensure_group_name(str(name), idx)
+                for entry in self._iter_members(members):
+                    if isinstance(entry, int) and 0 <= entry < len(names):
+                        self._prefill[entry] = label
+                    elif isinstance(entry, str) and entry in names:
+                        self._prefill[names.index(entry)] = label
+        elif isinstance(groups, IterableABC):
+            for idx, group in enumerate(groups, start=1):
+                if isinstance(group, Mapping):
+                    label = _ensure_group_name(
+                        self._first_of(group, "name", "label", "title"),
+                        idx,
+                    )
+                    members = group.get("circuits") or group.get("obwody") or group
+                else:
+                    label = _ensure_group_name(None, idx)
+                    members = group
+                for entry in self._iter_members(members):
+                    if isinstance(entry, int) and 0 <= entry < len(names):
+                        self._prefill[entry] = label
+                    elif isinstance(entry, str) and entry in names:
+                        self._prefill[names.index(entry)] = label
+
+        if not self._group_names and self._obwody:
+            self._group_names = ["RCD 1", "RCD 2"]
+
+    # ------------------------------------------------------------------
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        info = QLabel(
+            "Wybierz grupę RCD dla każdego obwodu (pozostaw \n"
+            "pole puste, aby nie przypisywać obwodu)."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_widget = QWidget()
+        grid = QGridLayout(scroll_widget)
+        grid.setColumnStretch(1, 1)
+
+        for row, obw in enumerate(self._obwody):
+            label = QLabel(self._format_obwod_label(obw, row))
+            combo = QComboBox()
+            combo.addItem(self._PLACEHOLDER)
+            for name in self._group_names:
+                combo.addItem(name)
+            if row in self._prefill:
+                combo.setCurrentText(self._prefill[row])
+            self._combos.append(combo)
+
+            grid.addWidget(label, row, 0)
+            grid.addWidget(combo, row, 1)
+
+        scroll.setWidget(scroll_widget)
+        layout.addWidget(scroll, 1)
+
+        add_layout = QHBoxLayout()
+        add_layout.addWidget(QLabel("Dodaj grupę:"))
+        self._new_group_edit = QLineEdit()
+        self._new_group_edit.setPlaceholderText("np. RCD kuchnia")
+        add_button = QPushButton("Dodaj")
+        add_button.clicked.connect(self._add_group)
+        add_layout.addWidget(self._new_group_edit)
+        add_layout.addWidget(add_button)
+        layout.addLayout(add_layout)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    # ------------------------------------------------------------------
     def _add_group(self) -> None:
-        if not self._entry_new_group:
+        if self._new_group_edit is None:
             return
-        name = self._entry_new_group.get().strip()
+        name = self._new_group_edit.text().strip()
         if not name:
             return
-        if name not in self._group_options:
-            self._group_options.append(name)
-            values = self._combo_values()
-            for combo in self._combo_boxes:
-                combo.configure(values=values)
-        self._entry_new_group.delete(0, "end")
+        if name not in self._group_names:
+            self._group_names.append(name)
+            for combo in self._combos:
+                combo.addItem(name)
+        self._new_group_edit.clear()
 
-    def _on_save(self) -> None:
-        groups: Dict[str, List[int]] = {}
-        for idx, var in enumerate(self._group_vars):
-            name = var.get().strip()
-            if not name:
+    # ------------------------------------------------------------------
+    def _on_accept(self) -> None:
+        grouped: "OrderedDict[str, list[str]]" = OrderedDict()
+        for idx, combo in enumerate(self._combos):
+            choice = combo.currentText()
+            if not choice or choice == self._PLACEHOLDER:
                 continue
-            groups.setdefault(name, []).append(idx)
-        self._groups = groups
-        self._result = True
-        if self._dialog is not None:
-            self._dialog.destroy()
+            label = choice.strip()
+            if not label:
+                continue
+            grouped.setdefault(label, []).append(self._obwod_name(self._obwody[idx]))
 
-    def _on_cancel(self) -> None:
-        self._result = False
-        if self._dialog is not None:
-            self._dialog.destroy()
+        self._result_groups = [
+            {"name": name, "circuits": members}
+            for name, members in grouped.items()
+        ]
+        self.accept()
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _obwod_name(obw: Any) -> str:
+        if isinstance(obw, Mapping):
+            name = obw.get("nazwa") or obw.get("name")
+            if name:
+                return str(name)
+        name = getattr(obw, "nazwa", None) or getattr(obw, "name", None)
+        if name:
+            return str(name)
+        return "Nieznany obwód"
+
+    @classmethod
+    def _format_obwod_label(cls, obw: Any, idx: int) -> str:
+        base = cls._obwod_name(obw)
+        zabezpieczenie = None
+        if isinstance(obw, Mapping):
+            zabezpieczenie = obw.get("zabezpieczenie")
+        else:
+            zabezpieczenie = getattr(obw, "zabezpieczenie", None)
+        if zabezpieczenie:
+            return f"{base} ({zabezpieczenie})"
+        if base == "Nieznany obwód":
+            return f"Obwód {idx + 1}"
+        return base
+
+    @staticmethod
+    def _iter_members(raw: Any) -> Iterable[Any]:
+        if raw is None:
+            return []
+        if isinstance(raw, Mapping):
+            members = raw.get("circuits") or raw.get("obwody") or raw.get("items")
+            return members if members is not None else []
+        if isinstance(raw, (str, bytes)):
+            return [raw]
+        if isinstance(raw, IterableABC):
+            return raw
+        return []
+
+    @staticmethod
+    def _first_of(mapping: Mapping[str, Any], *keys: str) -> str | None:
+        for key in keys:
+            value = mapping.get(key)
+            if value:
+                return str(value)
+        return None
+
