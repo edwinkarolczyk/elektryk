@@ -78,7 +78,9 @@ class CableCalculatorDialog(tk.Toplevel):
             cross_section = "4 mm²"
 
         self.result_var.set(
-            f"I = {current:.2f} A, spadek ≈ {voltage_drop_percent:.2f}%, "
-            f"zalecany przewód: {cross_section}"
+            (
+                f"I = {current:.2f} A, spadek ≈ {voltage_drop_percent:.2f}%, "
+                f"zalecany przewód: {cross_section}"
+            )
         )
 
