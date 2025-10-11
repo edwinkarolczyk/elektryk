@@ -6,6 +6,7 @@
 # -----------------------------------------
 
 import sys, json, os
+from typing import Optional
 from elektryk_report import generate_all_reports
 from elektryk_icons import icon_label, ICON_MAP
 from PyQt6.QtWidgets import (
@@ -23,6 +24,18 @@ def _clamp_point_to_rect(point: QPointF, rect: QRectF) -> QPointF:
     clamped_x = max(rect.left(), min(point.x(), rect.right()))
     clamped_y = max(rect.top(), min(point.y(), rect.bottom()))
     return QPointF(clamped_x, clamped_y)
+
+
+def _snap_point_to_grid(point: QPointF, grid_size: int, rect: Optional[QRectF] = None) -> QPointF:
+    """Snap a point to the grid and optionally clamp it to the given rect."""
+    snapped = QPointF(
+        round(point.x() / grid_size) * grid_size,
+        round(point.y() / grid_size) * grid_size,
+    )
+
+    if rect is not None:
+        return _clamp_point_to_rect(snapped, rect)
+    return snapped
 
 # -------------------------------
 # Stałe i ścieżki
@@ -111,14 +124,9 @@ class ElektrykElement(QGraphicsRectItem):
         return super().itemChange(change, value)
 
     def _snap_point(self, point):
-        x = round(point.x() / self.grid_size) * self.grid_size
-        y = round(point.y() / self.grid_size) * self.grid_size
-        snapped = QPointF(x, y)
-
         scene = self.scene()
-        if scene:
-            return _clamp_point_to_rect(snapped, scene.sceneRect())
-        return snapped
+        rect = scene.sceneRect() if scene else None
+        return _snap_point_to_grid(point, self.grid_size, rect)
 
     def to_dict(self):
         return {
@@ -393,11 +401,7 @@ class ElektrykApp(QMainWindow):
         return typ
 
     def _snap_point(self, point: QPointF) -> QPointF:
-        x = round(point.x() / self.grid_size) * self.grid_size
-        y = round(point.y() / self.grid_size) * self.grid_size
-
-        scene_rect = self.scene.sceneRect()
-        return _clamp_point_to_rect(QPointF(x, y), scene_rect)
+        return _snap_point_to_grid(point, self.grid_size, self.scene.sceneRect())
 
     def toggle_snap(self, checked: bool):
         self.snap_to_grid = bool(checked)
