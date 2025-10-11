@@ -383,7 +383,15 @@ class ElektrykApp(QMainWindow):
     def _snap_point(self, point: QPointF) -> QPointF:
         x = round(point.x() / self.grid_size) * self.grid_size
         y = round(point.y() / self.grid_size) * self.grid_size
-        return QPointF(x, y)
+
+        scene_rect = self.scene.sceneRect()
+        min_x, max_x = scene_rect.left(), scene_rect.right()
+        min_y, max_y = scene_rect.top(), scene_rect.bottom()
+
+        clamped_x = max(min_x, min(x, max_x))
+        clamped_y = max(min_y, min(y, max_y))
+
+        return QPointF(clamped_x, clamped_y)
 
     def toggle_snap(self, checked: bool):
         self.snap_to_grid = bool(checked)
