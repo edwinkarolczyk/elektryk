@@ -17,6 +17,13 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QPen, QColor, QBrush, QAction
 from PyQt6.QtCore import Qt, QRectF, QPointF
 
+
+def _clamp_point_to_rect(point: QPointF, rect: QRectF) -> QPointF:
+    """Clamp a point to the provided rectangle bounds."""
+    clamped_x = max(rect.left(), min(point.x(), rect.right()))
+    clamped_y = max(rect.top(), min(point.y(), rect.bottom()))
+    return QPointF(clamped_x, clamped_y)
+
 # -------------------------------
 # Stałe i ścieżki
 # -------------------------------
@@ -106,7 +113,12 @@ class ElektrykElement(QGraphicsRectItem):
     def _snap_point(self, point):
         x = round(point.x() / self.grid_size) * self.grid_size
         y = round(point.y() / self.grid_size) * self.grid_size
-        return QPointF(x, y)
+        snapped = QPointF(x, y)
+
+        scene = self.scene()
+        if scene:
+            return _clamp_point_to_rect(snapped, scene.sceneRect())
+        return snapped
 
     def to_dict(self):
         return {
@@ -385,13 +397,7 @@ class ElektrykApp(QMainWindow):
         y = round(point.y() / self.grid_size) * self.grid_size
 
         scene_rect = self.scene.sceneRect()
-        min_x, max_x = scene_rect.left(), scene_rect.right()
-        min_y, max_y = scene_rect.top(), scene_rect.bottom()
-
-        clamped_x = max(min_x, min(x, max_x))
-        clamped_y = max(min_y, min(y, max_y))
-
-        return QPointF(clamped_x, clamped_y)
+        return _clamp_point_to_rect(QPointF(x, y), scene_rect)
 
     def toggle_snap(self, checked: bool):
         self.snap_to_grid = bool(checked)
