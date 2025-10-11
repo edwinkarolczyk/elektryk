@@ -13,6 +13,8 @@ from typing import List, Dict, Optional, Tuple
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 
+from ui_calc import CableCalculatorDialog
+
 try:
     from PIL import Image, ImageDraw, ImageTk
     PIL_AVAILABLE = True
@@ -282,11 +284,18 @@ class ElektrykaApp:
         mfile.add_separator()
         mfile.add_command(label="Wyjście", command=self.root.destroy)
         menubar.add_cascade(label="Plik", menu=mfile)
+
+        mtools = tk.Menu(menubar, tearoff=False)
+        mtools.add_command(label="Kalkulator przewodów", command=self._open_cable_calculator)
+        menubar.add_cascade(label="Narzędzia", menu=mtools)
         self.root.config(menu=menubar)
 
     def _bind_keys(self):
         self.root.bind("<Control-s>", lambda e:self.save_project())
         self.root.bind("<Control-o>", lambda e:self.load_project())
+
+    def _open_cable_calculator(self):
+        CableCalculatorDialog(self.root)
 
     # ---------- refresh lists ----------
     def _refresh_lists(self):
